@@ -38,12 +38,19 @@ def createmap():
   remap = deepcopy(map) 
   return 
 
+def dectendgame():
+  global map
+  endgame =[
+    [1,2,3],
+    [4,5,6],
+    [7,8,[]]
+  ]
+  if(map == endgame): window.destroy()
+
+
 def action(x, y):
   global map
   samemap = deepcopy(map)
-  # print map
-  # print str(x) +'-'+str(y)
-  # print map[x][y]
   if(not map[x][y]): return
   for i in range(4):
     tx = x + victor[i][0]
@@ -54,6 +61,8 @@ def action(x, y):
       map[x][y] = v
   if(samemap != map ): remap = deepcopy(map)
   graphic()
+  dectendgame()
+
 
 def play():
   global map
