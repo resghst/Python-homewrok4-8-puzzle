@@ -1,5 +1,5 @@
 import Tkinter as tk
-import time as sleep
+from time import sleep
 import math
 import random 
 from copy import deepcopy 
@@ -33,16 +33,18 @@ def thdectcorrect(map):
 
 def createmap(map):
   global remap
-  ran = random.sample(xrange(1,9), 8)
-  k=0
-  for i in range(3):
-    for j in range(3):
-      map[i][j]=ran[k]
-      k+=1
-      if(k==8): 
-        break
-        break
-  remap = deepcopy(map) 
+  while True:
+    ran = random.sample(xrange(1,9), 8)
+    k=0
+    for i in range(3):
+      for j in range(3):
+        map[i][j]=ran[k]
+        k+=1
+        if(k==8): 
+          break
+    remap = deepcopy(map) 
+    print checkmap(map)
+    if(checkmap(map)):break
   return 
 
 def action(x, y, map):
@@ -82,6 +84,81 @@ def thaction(x, y, map):
   ]
   if(map == endgame): window.destroy()
 
+#check map must be solve
+def checkmap(map):
+  invere =0
+  zerorow = 0
+  print map
+  for i in range(1,9):
+    if(map[i/3][i%3] == []): zerorow = i/3+1
+    for j in range(0,9):
+      if(map[i/3][i%3] < map[j/3][j%3]): invere+=1
+  return (invere + zerorow) % 2 == 0
+
+def distance(a, b): return abs(a[0]- b[0]) + abs(a[1]- b[1])
+#check not in correct position block count
+def h(map):
+  count = 0
+  for i in range(3):
+    for j in range(3):
+      t = map[i][j]
+      if(t): 
+        x = t/3
+        y = t%3
+        count += distance([i, j],[x, y])
+  return count
+
+
+def aifun(map):
+  print "ai s"
+  command = ["up", "down", "left", "right"]
+  dx = [-1, 1, 0, 0]
+  dy = [0, 0, -1, 1]
+  rev_dir = [1, 0, 3, 2]
+  solution = [[]for i in range(200)]
+  def onmap(pos): return 0<=pos[0]<3 and 0<=pos[1]<3 
+  def swap(a, b): return b, a
+  def IDAstar(x, y, gx, prev_dir, bound, ans, map):
+    hx = h(map)
+    print 'hx\t' + str(hx)
+    print 'gx\t' + str(gx)
+    print 'bound\t' + str(bound)
+    if (gx + hx > bound): return gx + hx
+    if (hx == 0): 
+      ans = True
+      return gx
+    next_bound = 1e9
+    for i in range(4):
+      nx = x - dx[i]
+      ny = y - dy[i]
+      if (rev_dir[i] == prev_dir or (not onmap([nx, ny])) ): continue
+
+      solution[gx] = i
+      map[nx][ny], map[x][y]=swap(map[nx][ny], map[x][y])
+      c = IDAstar(nx, ny, gx+1, i, bound, ans, map)
+      if (ans): return c
+      next_bound = min(next_bound, c)
+      map[x][y], map[nx][ny]=swap(map[x][y], map[nx][ny])
+    return next_bound
+    
+  def mainfun(map):
+    for i in range(9):
+      if(not map[i/3][i%3]): 
+        sx = i/3
+        sy = i%3
+    ans = False
+    bound = 0
+    while ((not ans) and bound <= 30):
+      bound = IDAstar(sx, sy, 0, -1, bound, ans, map)
+    normalgraphic()
+    if (not ans):
+      print "200 step fail"
+      return
+    for i in range( bound):
+      print command[solution[i]] + ' '
+  mainfun(map)
+  print "ai e"
+
 def play():
   global map
   createmap(map)
@@ -98,9 +175,11 @@ def th():
   threadgraphic()
 
 def ai():
-  global tmap
-  createmap(map)
-  normalgraphic()
+  global map
+  aifun(map)
+  # global tmap
+  # createmap(map)
+  # normalgraphic()
 
 def normalgraphic():
   global map
