@@ -1,15 +1,19 @@
 import Tkinter as tk
+import time 
 from time import sleep
 import math
 import random 
 from copy import deepcopy 
 import threading
+import json
 
 pos =  [[0 for i in range(3)]for i in range(3)]
 map =  [[[] for i in range(3)]for i in range(3)]
 remap = [[[] for i in range(3)]for i in range(3)]
 tmap = [[[[] for i in range(3)]for i in range(3)]for i in range(4)]
 tpos = [[[0 for i in range(3)]for i in range(3)]for i in range(4)]
+appearmap = {}
+hashcount = 0
 victor = [
   # X , Y
   [  0, -1 ], # L
@@ -33,19 +37,14 @@ def thdectcorrect(map):
 
 def createmap(map):
   global remap
-  while True:
-    ran = random.sample(xrange(1,9), 8)
-    k=0
-    for i in range(3):
-      for j in range(3):
-        map[i][j]=ran[k]
-        k+=1
-        if(k==8): 
-          break
-    remap = deepcopy(map) 
-    print checkmap(map)
-    if(checkmap(map)):break
-  return 
+  random.seed(time.time())
+  i = random.randint(0,2)
+  print i
+  if(i==0):map=[[1,7,8],[5,[],2],[4,3,6]]
+  elif(i==1):map=[[4,7,1],[3,[],5],[8,2,6]]
+  elif(i==2):map=[[3,1,4],[5,[],6],[8,7,2]]
+  remap = deepcopy(map)
+  return map
 
 def action(x, y, map):
   global remap
@@ -66,6 +65,7 @@ def action(x, y, map):
     [7,8,[]]
   ]
   if(map == endgame): window.destroy()
+  print checkmap(map)
 
 def thaction(x, y, map):
   if(not map[x][y]): return
@@ -88,26 +88,36 @@ def thaction(x, y, map):
 def checkmap(map):
   invere =0
   zerorow = 0
-  print map
-  for i in range(1,9):
+  for i in range(9):
     if(map[i/3][i%3] == []): zerorow = i/3+1
-    for j in range(0,9):
+    for j in range(i):
       if(map[i/3][i%3] < map[j/3][j%3]): invere+=1
   return (invere + zerorow) % 2 == 0
 
 def distance(a, b): return abs(a[0]- b[0]) + abs(a[1]- b[1])
 #check not in correct position block count
-def h(map):
+def h_d(map):
   count = 0
+  cp=[
+    [0,0],[0,1],[0,2],
+    [1,0],[1,1],[1,2],
+    [2,0],[2,1]
+  ]
   for i in range(3):
     for j in range(3):
       t = map[i][j]
       if(t): 
-        x = t/3
-        y = t%3
-        count += distance([i, j],[x, y])
+        target=cp[t-1]
+        count += distance([i, j],target)
   return count
-
+def h_p(map):
+  count=0
+  for i in range(9):
+    x=i/3
+    y=i%3
+    if(map[x][y]):
+      if( not map[x][y]==i+1):count+=1
+  return count
 
 def aifun(map):
   print "ai s"
@@ -115,45 +125,79 @@ def aifun(map):
   dx = [-1, 1, 0, 0]
   dy = [0, 0, -1, 1]
   rev_dir = [1, 0, 3, 2]
-  solution = [[]for i in range(200)]
+  solution = [[]for i in range(9999)]
   def onmap(pos): return 0<=pos[0]<3 and 0<=pos[1]<3 
-  def swap(a, b): return b, a
+  def swap(a, b, map):
+    tem = map[a[0]][a[1]]
+    map[a[0]][a[1]] = map[b[0]][b[1]]
+    map[b[0]][b[1]] = tem
+  def testhash(map):
+    global appearmap
+    astr = ''
+    for i in range(3):
+      for j in range(3):
+        if(map[i][j]): astr+= str(map[i][j])
+        else: astr+= '0'
+    try: 
+      if(appearmap[astr]):  return True   
+    except KeyError: return False
+  def hashfun(map):
+    global appearmap
+    global hashcount
+    astr = ''
+    for i in range(3):
+      for j in range(3):
+        if(map[i][j]): astr+= str(map[i][j])
+        else: astr+= '0'
+    try: 
+      if(appearmap[astr]):  return True   
+    except KeyError: 
+      hashcount+=1
+      appearmap[astr] = True
+      fd = open('d.json','w+')
+      fd.write(json.dumps(appearmap))
+      fd.close()
+      return False
+    
   def IDAstar(x, y, gx, prev_dir, bound, ans, map):
-    hx = h(map)
-    print 'hx\t' + str(hx)
-    print 'gx\t' + str(gx)
-    print 'bound\t' + str(bound)
-    if (gx + hx > bound): return gx + hx
-    if (hx == 0): 
+    normalgraphic()
+    hx =  h_d(map)*1.5
+    print 'hx\t' + str(hx) + '\tgx\t' + str(gx) + '\tbound\t' + str(bound)
+    if (gx + hx > bound): return gx + hx, ans
+    if (hx == 0):
+      print 'finish' 
       ans = True
-      return gx
-    next_bound = 1e9
+      return gx, ans
     for i in range(4):
       nx = x - dx[i]
       ny = y - dy[i]
       if (rev_dir[i] == prev_dir or (not onmap([nx, ny])) ): continue
-
       solution[gx] = i
-      map[nx][ny], map[x][y]=swap(map[nx][ny], map[x][y])
-      c = IDAstar(nx, ny, gx+1, i, bound, ans, map)
-      if (ans): return c
-      next_bound = min(next_bound, c)
-      map[x][y], map[nx][ny]=swap(map[x][y], map[nx][ny])
-    return next_bound
+      swap([nx, ny], [x, y], map)
+      if(not hashfun(map)):
+        bound, ans = IDAstar(nx, ny, gx+1, i, bound, ans, map)
+        if (ans): return bound, ans
+      swap([x, y], [nx, ny], map)
+    return bound, ans
     
   def mainfun(map):
+    global appearmap
     for i in range(9):
       if(not map[i/3][i%3]): 
         sx = i/3
         sy = i%3
     ans = False
     bound = 0
-    while ((not ans) and bound <= 30):
-      bound = IDAstar(sx, sy, 0, -1, bound, ans, map)
-    normalgraphic()
-    if (not ans):
+    hashfun(map)
+    while ((not ans) and bound <= 200):
+      print 'bound\t'+ str(bound) + '\tans\t' +str(ans)
+      bound, ans= IDAstar(sx, sy, 0, -1, bound, ans, map)
+      print 'back\tans\t' +str(ans)
+      normalgraphic()
+    if ( not ans ):
       print "200 step fail"
       return
+    print bound
     for i in range( bound):
       print command[solution[i]] + ' '
   mainfun(map)
@@ -161,7 +205,7 @@ def aifun(map):
 
 def play():
   global map
-  createmap(map)
+  map = createmap(map)
   normalgraphic()
 
 def re():
