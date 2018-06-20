@@ -6,14 +6,15 @@ import random
 from copy import deepcopy 
 import threading
 import json
-
+gxbound=0
 pos =  [[0 for i in range(3)]for i in range(3)]
 map =  [[[] for i in range(3)]for i in range(3)]
 remap = [[[] for i in range(3)]for i in range(3)]
 tmap = [[[[] for i in range(3)]for i in range(3)]for i in range(4)]
 tpos = [[[0 for i in range(3)]for i in range(3)]for i in range(4)]
 appearmap = {}
-hashcount = 0
+step = 0
+thstep=[0 for i in range(4)]
 victor = [
   # X , Y
   [  0, -1 ], # L
@@ -47,7 +48,7 @@ def createmap(map):
   return map
 
 def action(x, y, map):
-  global remap
+  global remap,step
   samemap = deepcopy(map)
   if(not map[x][y]): return
   for i in range(4):
@@ -57,7 +58,9 @@ def action(x, y, map):
       v = map[tx][ty]
       map[tx][ty] = map[x][y]
       map[x][y] = v
-  if(samemap != map ): remap = deepcopy(samemap)
+  if(samemap != map ): 
+    step+=1
+    remap = deepcopy(samemap)
   normalgraphic()
   endgame =[
     [1,2,3],
@@ -65,7 +68,6 @@ def action(x, y, map):
     [7,8,[]]
   ]
   if(map == endgame): window.destroy()
-  print checkmap(map)
 
 def thaction(x, y, map):
   if(not map[x][y]): return
@@ -84,16 +86,6 @@ def thaction(x, y, map):
   ]
   if(map == endgame): window.destroy()
 
-#check map must be solve
-def checkmap(map):
-  invere =0
-  zerorow = 0
-  for i in range(9):
-    if(map[i/3][i%3] == []): zerorow = i/3+1
-    for j in range(i):
-      if(map[i/3][i%3] < map[j/3][j%3]): invere+=1
-  return (invere + zerorow) % 2 == 0
-
 def distance(a, b): return abs(a[0]- b[0]) + abs(a[1]- b[1])
 #check not in correct position block count
 def h_d(map):
@@ -105,27 +97,19 @@ def h_d(map):
   ]
   for i in range(3):
     for j in range(3):
-      t = map[i][j]
-      if(t): 
-        target=cp[t-1]
+      if(map[i][j]!=0): 
+        target=cp[map[i][j]-1]
         count += distance([i, j],target)
   return count
-def h_p(map):
-  count=0
-  for i in range(9):
-    x=i/3
-    y=i%3
-    if(map[x][y]):
-      if( not map[x][y]==i+1):count+=1
-  return count
 
+ans = False
 def aifun(map):
+  global appearmap, ans
   print "ai s"
-  command = ["up", "down", "left", "right"]
   dx = [-1, 1, 0, 0]
   dy = [0, 0, -1, 1]
   rev_dir = [1, 0, 3, 2]
-  solution = [[]for i in range(9999)]
+  solution = [[]for i in range(200)]
   def onmap(pos): return 0<=pos[0]<3 and 0<=pos[1]<3 
   def swap(a, b, map):
     tem = map[a[0]][a[1]]
@@ -134,109 +118,175 @@ def aifun(map):
   def testhash(map):
     global appearmap
     astr = ''
-    for i in range(3):
-      for j in range(3):
-        if(map[i][j]): astr+= str(map[i][j])
+    for i in range(9):
+        if(map[i/3][i%3]): astr+= str(map[i/3][i%3])
         else: astr+= '0'
     try: 
-      if(appearmap[astr]):  return True   
+      if(appearmap[astr]):  return True
     except KeyError: return False
   def hashfun(map):
     global appearmap
-    global hashcount
     astr = ''
-    for i in range(3):
-      for j in range(3):
-        if(map[i][j]): astr+= str(map[i][j])
+    for i in range(9):
+        if(map[i/3][i%3]): astr+= str(map[i/3][i%3])
         else: astr+= '0'
     try: 
-      if(appearmap[astr]):  return True   
+      if(appearmap[astr]):  return
     except KeyError: 
-      hashcount+=1
       appearmap[astr] = True
-      fd = open('d.json','w+')
-      fd.write(json.dumps(appearmap))
-      fd.close()
-      return False
-    
-  def IDAstar(x, y, gx, prev_dir, bound, ans, map):
-    normalgraphic()
-    hx =  h_d(map)*1.5
-    print 'hx\t' + str(hx) + '\tgx\t' + str(gx) + '\tbound\t' + str(bound)
-    if (gx + hx > bound): return gx + hx, ans
+  def IDAstar(x, y, gx, prev_dir, bound, map):
+    global ans,gxbound
+    hx = h_d(map)
+    if (gx + hx > bound): return gx + hx
     if (hx == 0):
-      print 'finish' 
       ans = True
-      return gx, ans
+      return gx
+    workdir=[-1 for i in range(4)]
+    j=0
     for i in range(4):
       nx = x - dx[i]
       ny = y - dy[i]
       if (rev_dir[i] == prev_dir or (not onmap([nx, ny])) ): continue
-      solution[gx] = i
-      swap([nx, ny], [x, y], map)
-      if(not hashfun(map)):
-        bound, ans = IDAstar(nx, ny, gx+1, i, bound, ans, map)
-        if (ans): return bound, ans
-      swap([x, y], [nx, ny], map)
-    return bound, ans
+      workdir[j] = i
+      j+=1
+    pmap=deepcopy(map)
+    for i in range(len(workdir)):
+      t = workdir[i]
+      if(t!=-1):
+        nx = x - dx[t]
+        ny = y - dy[t]
+        solution[gx] = t
+        swap([nx, ny], [x, y], map)
+        nbound = bound
+        if(not testhash(map)):
+          nbound = bound
+          if(j==i+1):  hashfun(pmap)
+          omap=deepcopy(map)
+          bound = IDAstar(nx, ny, gx+1, t, nbound, omap)
+          if(ans):return gx
+        swap([x, y], [nx, ny], map)
+        if(bound>=45 ): bound = nbound
+    return bound
     
-  def mainfun(map):
-    global appearmap
-    for i in range(9):
-      if(not map[i/3][i%3]): 
-        sx = i/3
-        sy = i%3
-    ans = False
-    bound = 0
-    hashfun(map)
-    while ((not ans) and bound <= 200):
-      print 'bound\t'+ str(bound) + '\tans\t' +str(ans)
-      bound, ans= IDAstar(sx, sy, 0, -1, bound, ans, map)
-      print 'back\tans\t' +str(ans)
-      normalgraphic()
-    if ( not ans ):
-      print "200 step fail"
-      return
-    print bound
-    for i in range( bound):
-      print command[solution[i]] + ' '
-  mainfun(map)
+  # mainfun
+  for i in range(9):
+    if(map[i/3][i%3]==[]): map[i/3][i%3]=0
+  for i in range(9):
+    if(map[i/3][i%3]==0): 
+      sx = i/3
+      sy = i%3
+  bound = 0 
+  hashfun(map)
+  while (not ans and bound <= 200):
+    bound= IDAstar(sx, sy, 0, -1, bound, map)
   print "ai e"
+  return solution
+
+def solactionfun(thi, solution):
+  global tmap, thstep
+  dx = [-1, 1, 0, 0]
+  dy = [0, 0, -1, 1]
+  ans = [ [1,2,3],[4,5,6],[7,8,[]] ]
+  def swap(a, b, tmap):
+    tem = tmap[thi][a[0]][a[1]]
+    tmap[thi][a[0]][a[1]] = tmap[thi][b[0]][b[1]]
+    tmap[thi][b[0]][b[1]] = tem
+  for j in range(9):
+    if(not tmap[thi][j/3][j%3]):
+      x = j/3
+      y = j%3
+  for i in solution:
+    if(i!=[]):
+      thstep[thi]+=1
+      nx = x - dx[i]
+      ny = y - dy[i]
+      swap([nx, ny], [x, y], tmap)
+      x = nx
+      y = ny
+      sleep(0.5)
+      threadgraphic()
+    else: break
+
+def testact( solution):
+  global map, step
+  dx = [-1, 1, 0, 0]
+  dy = [0, 0, -1, 1]
+  ans = [ [1,2,3],[4,5,6],[7,8,[]] ]
+  def swap(a, b, map):
+    tem = map[a[0]][a[1]]
+    map[a[0]][a[1]] = map[b[0]][b[1]]
+    map[b[0]][b[1]] = tem
+  for j in range(9):
+    if(not map[j/3][j%3]):
+      x = j/3
+      y = j%3
+  for i in solution:
+    if(i!=[]):
+      step+=1
+      nx = x - dx[i]
+      ny = y - dy[i]
+      swap([nx, ny], [x, y], map)
+      x = nx
+      y = ny
+      sleep(0.5)
+      normalgraphic()
+    else: break
 
 def play():
   global map
   map = createmap(map)
   normalgraphic()
+  aa=raw_input()
+  solution = [[]for i in range(200)]
+  solution= aifun(map)
+  map = deepcopy(remap)
+  testact(solution)
 
 def re():
-  global map
-  map = deepcopy(remap)
+  global map, step
+  if(map!=remap):
+    step-=1
+    map = deepcopy(remap)
   normalgraphic()
 
 def th():
-  global tmap
-  for i in range(4):  createmap(tmap[i])
+  global tmap, map
+  map =  [[[] for i in range(3)]for i in range(3)]
+  map = createmap(map)
+  for i in range(4): tmap[i] = deepcopy(map)
   threadgraphic()
 
 def ai():
-  global map
-  aifun(map)
-  # global tmap
-  # createmap(map)
-  # normalgraphic()
+  global tmap, map, thstep
+  solution = [[]for i in range(200)]
+  solution= aifun(map)
+  thread0 = threading.Thread(target = solactionfun, args=(0, solution))
+  thread1 = threading.Thread(target = solactionfun, args=(1, solution))
+  thread2 = threading.Thread(target = solactionfun, args=(2, solution))
+  thread3 = threading.Thread(target = solactionfun, args=(3, solution))
+  thread0.start()
+  thread1.start()
+  thread2.start()
+  thread3.start()
+  print 'end'
+  threadgraphic()
+
+  
 
 def normalgraphic():
-  global map
+  global map, step
   dectcorrect(map)
   back = ['#f9f7f7', '#60efb8']
   B1 = tk.Button(window, text ="Play", command = play)
   B2 = tk.Button(window, text ="Return", command = re)
   B3 = tk.Button(window, text ="4-thread", command = th)
   B4 = tk.Button(window, text ="AI", command = ai)
+  L5 = tk.Label(window, text=step, font=('Arial', 14))
   B1.grid(column=0, row=0)
   B2.grid(column=1, row=0)
   B3.grid(column=2, row=0)
   B4.grid(column=3, row=0)
+  L5.grid(column=3, row=1)
   #===========================================
   tk.Button(window, text = map[0][0], bg = back[pos[0][0]],
     font=('Arial', 28), width = 3, height = 2, command = lambda: action(0, 0, map)
@@ -271,17 +321,26 @@ def normalgraphic():
 
 def threadgraphic():
   window.geometry('400x400')
-  global tmap
+  global tmap, thstep
+  print thstep
   thdectcorrect(tmap)
   back = ['#f9f7f7', '#60efb8']
   B1 = tk.Button(window, text ="Play", command = play)
   B2 = tk.Button(window, text ="Return", command = re)
   B3 = tk.Button(window, text ="4-thread", command = th)
   B4 = tk.Button(window, text ="AI", command = ai)
+  L0 = tk.Label(window, text=thstep[0], font=('Arial', 14))
+  L1 = tk.Label(window, text=thstep[1], font=('Arial', 14))
+  L2 = tk.Label(window, text=thstep[2], font=('Arial', 14))
+  L3 = tk.Label(window, text=thstep[3], font=('Arial', 14))
   B1.grid(column=0, row=0)
   B2.grid(column=1, row=0)
   B3.grid(column=2, row=0)
   B4.grid(column=3, row=0)
+  L0.grid(column=0, row=7)
+  L1.grid(column=1, row=7)
+  L2.grid(column=2, row=7)
+  L3.grid(column=3, row=7)
   #----------------------------------------------------------------
   #-----G0-----
   tk.Button(window, text = tmap[0][0][0], bg = back[tpos[0][0][0]],
